@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,sans-serif; background:#0f172a; color:#e2e8f0; min-height:100vh; }
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:#1e293b; }
+  ::-webkit-scrollbar-thumb { background:#3b82f6; border-radius:3px; }
+}
+@layer components {
+  .glass { background:rgba(255,255,255,0.03); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.08); }
+  .glass-card { @apply glass rounded-2xl p-5 transition-all duration-300; }
+  .glass-card:hover { background:rgba(255,255,255,0.06); border-color:rgba(59,130,246,0.3); }
+  .gradient-text { @apply bg-clip-text text-transparent; background-image:linear-gradient(135deg,#3b82f6,#14b8a6); }
+  .gradient-bg { background:linear-gradient(135deg,#1a56db,#3b82f6); }
+  .btn-primary { @apply px-5 py-2.5 rounded-xl font-semibold text-white transition-all duration-300; background:linear-gradient(135deg,#1a56db,#3b82f6); }
+  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(59,130,246,0.3); }
+}

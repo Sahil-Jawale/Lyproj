@@ -1,0 +1,47 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: medscript_db
+      POSTGRES_USER: medscript_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-medscript123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports: ['5432:5432']
+
+  redis:
+    image: redis:7.2-alpine
+    ports: ['6379:6379']
+
+  backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DATABASE_URL=postgresql://medscript_user:${DB_PASSWORD:-medscript123}@db/medscript_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - ML_SERVER_URL=http://ml_server:8001
+    depends_on: [db, redis]
+    ports: ['8000:8000']
+    volumes:
+      - ./backend:/app
+      - ./ml_pipeline:/app/ml_pipeline
+
+  ml_server:
+    build: ./ml_pipeline/model_serving
+    ports: ['8001:8001']
+    volumes:
+      - ./ml_pipeline:/app
+
+  web_app:
+    build: ./web_app
+    ports: ['5173:5173']
+    depends_on: [backend]
+
+  pharmacy_dashboard:
+    build: ./pharmacy_dashboard
+    ports: ['3001:3001']
+    depends_on: [backend]
+
+volumes:
+  postgres_data:
