@@ -1,67 +1,74 @@
 """
 Drug Interaction Knowledge Graph — Built with NetworkX.
-Pre-loaded with common drug interactions relevant to the BD prescription dataset.
+Loads data dynamically from the Kaggle DDI dataset if available, falling back to a subset.
 """
+import os
 import networkx as nx
+import pandas as pd
 from typing import List, Dict, Tuple, Optional
 from .severity_labels import Severity
 
-# Pre-built interaction data: (drug_a, drug_b, severity, description)
+# Pre-built fallback interaction data
 INTERACTION_DATA = [
     ("Napa","Ace","minor","Both contain paracetamol/acetaminophen — risk of overdose if combined"),
     ("Napa","Aceta","minor","Duplicate paracetamol — do not combine"),
     ("Napa Extend","Ace","moderate","Extended-release paracetamol with regular — overdose risk"),
-    ("Napa Extend","Napa","moderate","Duplicate paracetamol formulations"),
-    ("Azithrocin","Azyth","minor","Same active ingredient (azithromycin) — duplicate therapy"),
-    ("Azithrocin","Rozith","minor","Both macrolide antibiotics — no benefit from combining"),
-    ("Azithrocin","Romycin","minor","Duplicate macrolide therapy"),
-    ("Nidazyl","Metro","minor","Both contain metronidazole — duplicate therapy"),
-    ("Esoral","Maxpro","minor","Both are proton pump inhibitors — no benefit from combining"),
-    ("Esoral","Sergel","minor","Duplicate PPI therapy"),
-    ("Esoral","Nexum","minor","Duplicate PPI therapy (esomeprazole)"),
-    ("Esoral","Exium","minor","Duplicate PPI therapy"),
-    ("Maxpro","Sergel","minor","Duplicate PPI therapy"),
     ("Rivotril","Baclofen","severe","CNS depression — combined sedation risk"),
-    ("Rivotril","Etizin","severe","Both benzodiazepines — respiratory depression risk"),
-    ("Baclofen","Flexibac","minor","Same active ingredient — duplicate therapy"),
-    ("Baclofen","Baclon","minor","Same active ingredient — duplicate therapy"),
-    ("Baclofen","Flexilax","moderate","Both muscle relaxants — excessive sedation"),
-    ("Ketoral","Ketocon","minor","Duplicate ketoconazole therapy"),
-    ("Ketoral","Ketotab","minor","Duplicate ketoconazole therapy"),
-    ("Ketoral","Ketozol","minor","Duplicate ketoconazole therapy"),
-    ("Ketocon","Ketotab","minor","Duplicate ketoconazole therapy"),
-    ("Fexofast","Fexo","minor","Same active ingredient (fexofenadine) — duplicate therapy"),
-    ("Fexofast","Fenadin","minor","Duplicate fexofenadine therapy"),
-    ("Fexofast","Telfast","minor","Duplicate fexofenadine therapy"),
-    ("Fexofast","Dinafex","minor","Duplicate fexofenadine therapy"),
-    ("Atrizin","Cetisoft","minor","Both contain cetirizine — duplicate antihistamine"),
-    ("Atrizin","Alatrol","minor","Duplicate cetirizine therapy"),
-    ("Montair","Monas","minor","Both contain montelukast — duplicate therapy"),
-    ("Montair","Montex","minor","Duplicate montelukast therapy"),
-    ("Montair","MKast","minor","Duplicate montelukast therapy"),
-    ("Montair","Montene","minor","Duplicate montelukast therapy"),
-    ("Canazole","Candinil","minor","Duplicate antifungal therapy"),
-    ("Diflu","Flugal","minor","Both contain fluconazole — duplicate therapy"),
-    ("Rivotril","Baclon","severe","Benzodiazepine + muscle relaxant — CNS depression"),
-    ("Napa","Metronidazole","moderate","Paracetamol + metronidazole — hepatotoxicity risk"),
-    ("Napa","Metro","moderate","Paracetamol + metronidazole — hepatotoxicity risk"),
     ("Aspirin","Ibuprofen","moderate","NSAIDs combined — increased GI bleeding risk"),
     ("Aspirin","Diclofenac","severe","NSAIDs combined — high GI bleeding risk"),
-    ("Metformin","Ciprofloxacin","moderate","May cause hypoglycemia"),
-    ("Azithromycin","Amoxicillin","minor","Macrolide + penicillin — potential antagonism"),
-    ("Omeprazole","Metformin","minor","PPI may affect metformin absorption"),
-    ("Ciprofloxacin","Metronidazole","moderate","QT prolongation risk"),
-    ("Ibuprofen","Aspirin","moderate","Ibuprofen may reduce cardioprotective effect of aspirin"),
-    ("Cetirizine","Rivotril","moderate","Increased sedation"),
-    ("Pantoprazole","Metformin","minor","PPI may affect metformin absorption"),
 ]
 
 class DrugInteractionGraph:
-    def __init__(self):
+    def __init__(self, dataset_path: Optional[str] = None):
         self.graph = nx.Graph()
-        self._build_graph()
+        if dataset_path and os.path.exists(dataset_path):
+            self._load_from_csv(dataset_path)
+        else:
+            self._build_fallback_graph()
 
-    def _build_graph(self):
+    def _load_from_csv(self, csv_path: str):
+        try:
+            # Handle potential encoding issues with pandas
+            df = pd.read_csv(csv_path, encoding='utf-8')
+            # Look for common column names in DDI datasets
+            drug_a_col = next((c for c in df.columns if 'drug' in c.lower() and 'a' in c.lower()), 'Drug A')
+            drug_b_col = next((c for c in df.columns if 'drug' in c.lower() and 'b' in c.lower()), 'Drug B')
+            severity_col = next((c for c in df.columns if 'sever' in c.lower()), 'Severity')
+            desc_col = next((c for c in df.columns if 'mech' in c.lower() or 'desc' in c.lower() or 'inter' in c.lower()), 'Mechanism')
+            
+            # If standard columns aren't found, try first few columns
+            if drug_a_col not in df.columns or drug_b_col not in df.columns:
+                drug_a_col = df.columns[0]
+                drug_b_col = df.columns[1]
+                severity_col = df.columns[2] if len(df.columns) > 2 else 'minor'
+                desc_col = df.columns[3] if len(df.columns) > 3 else 'Interaction noted'
+                
+            for _, row in df.iterrows():
+                a = str(row[drug_a_col]).strip()
+                b = str(row[drug_b_col]).strip()
+                sev = str(row[severity_col]).strip().lower() if severity_col in df.columns else 'minor'
+                
+                # Normalize severity
+                if 'major' in sev or 'severe' in sev or 'high' in sev:
+                    sev = 'severe'
+                elif 'moderate' in sev or 'med' in sev:
+                    sev = 'moderate'
+                else:
+                    sev = 'minor'
+                    
+                desc = str(row[desc_col]).strip() if desc_col in df.columns else f"Interaction between {a} and {b}"
+                
+                self.graph.add_edge(
+                    a.lower(), b.lower(),
+                    severity=Severity(sev), description=desc,
+                    drug_a=a, drug_b=b
+                )
+            print(f"Loaded {self.graph.number_of_edges()} interactions from {csv_path}")
+        except Exception as e:
+            print(f"Failed to load DDI CSV from {csv_path}: {e}. Using fallback data.")
+            self._build_fallback_graph()
+
+    def _build_fallback_graph(self):
         for a, b, sev, desc in INTERACTION_DATA:
             self.graph.add_edge(
                 a.lower(), b.lower(),
@@ -102,3 +109,4 @@ class DrugInteractionGraph:
             ints.append({'drug': data['drug_b'] if data['drug_a'].lower()==d else data['drug_a'],
                          'severity': data['severity'].value, 'description': data['description']})
         return {'drug': drug, 'interactions_count': len(ints), 'interactions': ints}
+

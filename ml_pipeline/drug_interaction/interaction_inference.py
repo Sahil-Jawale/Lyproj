@@ -1,13 +1,13 @@
 """
 Interaction Inference — Query knowledge graph for drug interactions.
 """
-from typing import List, Dict
+from typing import List, Dict, Optional
 from .build_knowledge_graph import DrugInteractionGraph
 from .severity_labels import Severity
 
 class InteractionChecker:
-    def __init__(self):
-        self.graph = DrugInteractionGraph()
+    def __init__(self, dataset_path: Optional[str] = None):
+        self.graph = DrugInteractionGraph(dataset_path)
 
     def check(self, medicine_names: List[str]) -> Dict:
         interactions = self.graph.check_all_interactions(medicine_names)

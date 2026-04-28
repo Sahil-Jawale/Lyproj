@@ -71,15 +71,29 @@ interactions_log: List[dict] = []
 # ─── App Setup ────────────────────────────────────────────────────────
 
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ml_pipeline'))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, 'ml_pipeline'))
 
 from ocr.trocr_inference import TrOCRInference
+from ocr.tesseract_inference import TesseractInference
 from ocr.postprocess_ocr import PostProcessor
 from drug_interaction.interaction_inference import InteractionChecker
 
-ocr_engine = TrOCRInference(model_path=None)
+# Setup dynamic paths for Kaggle datasets
+MODEL_DIR = os.path.join(BASE_DIR, 'ml_pipeline', 'checkpoints', 'trocr_bd_prescription', 'best_model')
+DDI_DATA_DIR = os.path.join(BASE_DIR, 'ml_pipeline', 'data', 'ddi_dataset')
+
+# Find CSV in DDI directory if it exists
+ddi_csv_path = None
+if os.path.exists(DDI_DATA_DIR):
+    import glob
+    csv_files = glob.glob(os.path.join(DDI_DATA_DIR, "*.csv"))
+    if csv_files:
+        ddi_csv_path = csv_files[0]
+
+ocr_engine = TesseractInference()
 post_processor = PostProcessor()
-interaction_checker = InteractionChecker()
+interaction_checker = InteractionChecker(dataset_path=ddi_csv_path)
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)

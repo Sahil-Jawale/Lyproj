@@ -66,6 +66,33 @@ class TrOCRInference:
         )
 
     def predict_prescription(self, image: Image.Image) -> Dict:
+        if not self.demo_mode:
+            # If using actual model, we pass the image to predict.
+            # In a full system, a text detector (e.g. CRAFT/DBNet) would crop words first.
+            # Here we just run the model on the full image or a cropped center as an example.
+            ocr_res = self.predict(image)
+            text = ocr_res.text
+            
+            # Very basic parsing of the predicted text assuming "Name Dosage Frequency"
+            parts = text.split()
+            name = parts[0] if parts else "Unknown"
+            dosage = parts[1] if len(parts) > 1 else ""
+            freq = parts[2] if len(parts) > 2 else ""
+            
+            return {
+                'raw_text': text,
+                'confidence': ocr_res.confidence,
+                'medicines': [{
+                    'name': name,
+                    'dosage': dosage,
+                    'frequency': freq,
+                    'duration': '',
+                    'instructions': '',
+                    'confidence': ocr_res.confidence,
+                }],
+                'patient_name': 'Patient', 'doctor_name': 'Dr. Physician', 'date': '2025-11-15',
+            }
+
         arr = np.array(image.convert('L').resize((32,32)))
         rng = random.Random(int(arr.sum()) % 10000)
         n = rng.randint(2, 5)
