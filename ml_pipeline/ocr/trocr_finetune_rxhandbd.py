@@ -1,17 +1,20 @@
 """
-trocr_finetune_rxhandbd.py — Phase 6
+trocr_finetune_rxhandbd.py — Phase 6 (v2 — fixed oscillation)
 
 Fine-tune TrOCR decoder on RxHandBD word crops.
 - Encoder (BEiT ViT-Large) : FROZEN  — saves ~1.3GB gradient memory
 - Decoder (RoBERTa)         : TRAINED — learns BD brand name character patterns
-- Device                    : MPS (Apple Silicon)
-- Precision                 : float32 (MPS has no float16 backward pass)
-- Batch size                : 4  + gradient accumulation 8 = effective batch 32
-- LR                        : 5e-5 (small — decoder already pretrained)
-- Epochs                    : 15 with early stopping (patience=4)
+- Device                    : auto (CUDA > MPS > CPU)
+- Precision                 : float32
+- Batch size                : 4 + gradient accumulation 4 = effective batch 16
+- LR                        : 1e-5  (was 5e-5 — too high, caused oscillation)
+- Scheduler                 : ReduceLROnPlateau (halves LR when val stalls)
+- Patience                  : 6 (was 4)
+- Epochs                    : 20
 
-Expected training time: ~2-3 hours on M-series Mac
-Expected outcome: raw CER drops ~35% → ~12-18% on BD names
+v1 result: best CER 0.4003 at epoch 2, then oscillated and early stopped.
+v2 fix:    lower LR + smaller effective batch = smooth convergence.
+Expected:  CER < 0.25 by epoch 8-12.
 """
 
 import sys, json, time
@@ -35,12 +38,12 @@ TRAIN_IMG_DIR = DATA_DIR / "Train_Set"
 MODEL_ID      = "microsoft/trocr-large-handwritten"
 SAVE_PATH     = SAVE_DIR / "trocr_rxhandbd_finetuned"
 
-DEVICE        = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE        = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 BATCH_SIZE    = 4
-GRAD_ACCUM    = 8       # effective batch = 32
-LR            = 5e-5
-MAX_EPOCHS    = 15
-PATIENCE      = 4
+GRAD_ACCUM    = 4       # effective batch = 16  (was 8 — too large, caused oscillation)
+LR            = 1e-5    # was 5e-5 — too high, caused CER to oscillate up/down
+MAX_EPOCHS    = 20      # more room to converge slowly
+PATIENCE      = 6       # was 4 — give more room before early stop
 IMG_H         = 384     # TrOCR optimal height
 
 print(f"[Finetune] Device: {DEVICE}", flush=True)
@@ -154,8 +157,10 @@ def main():
         [p for p in model.parameters() if p.requires_grad],
         lr=LR, weight_decay=0.01
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=MAX_EPOCHS
+    # ReduceLROnPlateau: halves LR when val CER doesn't improve for 2 epochs
+    # This handles the oscillation seen in v1 training
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=2, min_lr=1e-7
     )
 
     best_cer, no_improve = float("inf"), 0
@@ -192,7 +197,7 @@ def main():
         optimizer.zero_grad()
 
         epoch_loss /= len(train_dl)
-        scheduler.step()
+        scheduler.step(val_cer)   # ReduceLROnPlateau needs the metric
 
         # ── Validate ───────────────────────────────────────────────────
         model.eval()
