@@ -35,16 +35,24 @@ SAVE_DIR.mkdir(exist_ok=True)
 # ── Config ─────────────────────────────────────────────────────────────
 TRAIN_CSV     = DATA_DIR / "Train_Label.csv"
 TRAIN_IMG_DIR = DATA_DIR / "Train_Set"
-MODEL_ID      = "microsoft/trocr-large-handwritten"
-SAVE_PATH     = SAVE_DIR / "trocr_rxhandbd_finetuned"
+BASE_MODEL_ID = "microsoft/trocr-large-handwritten"
+
+# RESUME_FROM: friend's original model (the 45% one) — NEVER overwrite this
+RESUME_FROM = SAVE_DIR / "trocr_rxhandbd_finetuned"
+
+# SAVE_PATH: DIFFERENT folder — so friend's model stays safe
+SAVE_PATH   = SAVE_DIR / "trocr_rxhandbd_resumed"  # separate from RESUME_FROM
+
+MODEL_ID    = str(RESUME_FROM) if (RESUME_FROM and RESUME_FROM.exists()) else BASE_MODEL_ID
 
 DEVICE        = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 BATCH_SIZE    = 4
-GRAD_ACCUM    = 4       # effective batch = 16  (was 8 — too large, caused oscillation)
-LR            = 1e-5    # was 5e-5 — too high, caused CER to oscillate up/down
-MAX_EPOCHS    = 20      # more room to converge slowly
-PATIENCE      = 6       # was 4 — give more room before early stop
-IMG_H         = 384     # TrOCR optimal height
+GRAD_ACCUM    = 4       # effective batch = 16
+LR            = 5e-6    # low LR — resuming from already fine-tuned checkpoint
+MAX_EPOCHS    = 20
+PATIENCE      = 5
+IMG_H         = 384
+TRAIN_SUBSET  = None    # None = use ALL 4016 images — subset killed generalization
 
 print(f"[Finetune] Device: {DEVICE}", flush=True)
 print(f"[Finetune] Effective batch size: {BATCH_SIZE * GRAD_ACCUM}", flush=True)
@@ -120,9 +128,12 @@ def main():
     from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
     # Load model + processor
-    print(f"[Finetune] Loading {MODEL_ID}...", flush=True)
-    processor = TrOCRProcessor.from_pretrained(MODEL_ID)
-    model     = VisionEncoderDecoderModel.from_pretrained(MODEL_ID, torch_dtype=torch.float32)
+    is_resuming = RESUME_FROM and RESUME_FROM.exists()
+    load_from   = str(RESUME_FROM) if is_resuming else BASE_MODEL_ID
+    print(f"[Finetune] {'Resuming from checkpoint' if is_resuming else 'Starting fresh from'}: {load_from}", flush=True)
+
+    processor = TrOCRProcessor.from_pretrained(load_from)
+    model     = VisionEncoderDecoderModel.from_pretrained(load_from, torch_dtype=torch.float32)
 
     # FREEZE encoder — only decoder gets gradients
     for param in model.encoder.parameters():
@@ -143,15 +154,17 @@ def main():
     df["label"] = df["label"].astype(str).str.strip()
 
     train_df, val_df = train_test_split(df, test_size=0.1, random_state=42, shuffle=True)
-    print(f"[Finetune] Train: {len(train_df)} | Val: {len(val_df)}", flush=True)
 
-    train_ds = RxHandBDWordDataset(train_df, TRAIN_IMG_DIR, processor)
+    # Subset for fast epochs: sample TRAIN_SUBSET images, reshuffle each epoch
+    if TRAIN_SUBSET and TRAIN_SUBSET < len(train_df):
+        print(f"[Finetune] Using {TRAIN_SUBSET}/{len(train_df)} train images per epoch (fast mode)", flush=True)
+    print(f"[Finetune] Train: {min(TRAIN_SUBSET, len(train_df)) if TRAIN_SUBSET else len(train_df)} | Val: {len(val_df)}", flush=True)
+
     val_ds   = RxHandBDWordDataset(val_df,   TRAIN_IMG_DIR, processor)
 
-    train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,
-                          collate_fn=collate_fn, num_workers=0, pin_memory=False)
-    val_dl   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False,
-                          collate_fn=collate_fn, num_workers=0, pin_memory=False)
+    # Val loader is fixed
+    val_dl = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False,
+                        collate_fn=collate_fn, num_workers=0, pin_memory=False)
 
     optimizer = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
@@ -166,6 +179,15 @@ def main():
     best_cer, no_improve = float("inf"), 0
 
     for epoch in range(1, MAX_EPOCHS + 1):
+        # ── Build train loader with fresh random subset each epoch ──────
+        if TRAIN_SUBSET and TRAIN_SUBSET < len(train_df):
+            epoch_df = train_df.sample(TRAIN_SUBSET, random_state=epoch).reset_index(drop=True)
+        else:
+            epoch_df = train_df
+        epoch_ds = RxHandBDWordDataset(epoch_df, TRAIN_IMG_DIR, processor)
+        train_dl = DataLoader(epoch_ds, batch_size=BATCH_SIZE, shuffle=True,
+                              collate_fn=collate_fn, num_workers=0, pin_memory=False)
+
         # ── Train ──────────────────────────────────────────────────────
         model.train()
         epoch_loss, step = 0.0, 0
@@ -177,11 +199,14 @@ def main():
             pixel_values = batch["pixel_values"].to(DEVICE)
             labels       = batch["labels"].to(DEVICE)
 
-            outputs = model(pixel_values=pixel_values, labels=labels)
-            loss    = outputs.loss / GRAD_ACCUM      # scale for accumulation
+            # Mixed precision via autocast (MPS/CUDA) — cuts memory ~40%
+            with torch.autocast(device_type=DEVICE if DEVICE != "cpu" else "cpu",
+                                dtype=torch.float16, enabled=(DEVICE != "cpu")):
+                outputs = model(pixel_values=pixel_values, labels=labels)
+                loss    = outputs.loss / GRAD_ACCUM
 
             loss.backward()
-            epoch_loss += loss.item() * GRAD_ACCUM   # unscale for logging
+            epoch_loss += loss.item() * GRAD_ACCUM
 
             # Step optimizer every GRAD_ACCUM batches
             if (batch_idx + 1) % GRAD_ACCUM == 0:
@@ -197,7 +222,6 @@ def main():
         optimizer.zero_grad()
 
         epoch_loss /= len(train_dl)
-        scheduler.step(val_cer)   # ReduceLROnPlateau needs the metric
 
         # ── Validate ───────────────────────────────────────────────────
         model.eval()
@@ -220,6 +244,7 @@ def main():
                 all_targets.extend(targets)
 
         val_cer = char_error_rate(all_preds, all_targets)
+        scheduler.step(val_cer)   # ReduceLROnPlateau — must be called after validation
         elapsed = time.time() - t0
 
         print(
