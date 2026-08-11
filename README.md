@@ -1,4 +1,4 @@
-# 🏥 MedScript — AI-Powered Prescription Intelligence System
+# 🏥 PrescriptAI — AI-Powered Prescription Intelligence System
 
 <p align="center">
   <strong>Turn handwritten prescriptions into digital records with drug interaction safety checks.</strong>
