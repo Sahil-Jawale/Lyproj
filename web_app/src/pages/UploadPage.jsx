@@ -1,8 +1,26 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, Image, X, Loader2, Camera, FileUp, AlertCircle } from 'lucide-react'
+import { UploadCloud, ImageIcon, X, Loader2, FileUp, AlertCircle, ScanLine, Sun, Crop, Focus } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { uploadPrescription } from '../services/api'
+
+/**
+ * The stages a page actually goes through, in order. Shown instead of a
+ * percentage: the old bar counted up on a timer that had nothing to do with the
+ * request, which is a number that cannot be wrong because it means nothing.
+ */
+const STAGES = [
+  'Normalising the page…',
+  'Reading the handwriting…',
+  'Matching against the Indian brand register…',
+  'Verifying ingredients and screening interactions…',
+]
+
+const TIPS = [
+  { icon: Sun,   title: 'Even light',   desc: 'No hard shadow across the page and no flash glare on the ink.' },
+  { icon: Crop,  title: 'Whole page',   desc: 'Include the header and every line — a cropped edge is a lost medicine.' },
+  { icon: Focus, title: 'Flat and sharp', desc: 'Lay it flat on a contrasting surface and let the camera focus before shooting.' },
+]
 
 export default function UploadPage() {
   const navigate = useNavigate()
@@ -11,18 +29,15 @@ export default function UploadPage() {
   const [preview, setPreview] = useState(null)
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState(null)
-  const [progress, setProgress] = useState(0)
+  const [stage, setStage] = useState(0)
+  const timer = useRef(null)
+
+  useEffect(() => () => clearInterval(timer.current), [])
 
   const handleFile = useCallback((f) => {
     if (!f) return
-    if (!f.type.startsWith('image/')) {
-      setError('Please upload an image file (JPG, PNG, etc.)')
-      return
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB')
-      return
-    }
+    if (!f.type.startsWith('image/')) return setError('That is not an image. Upload a JPG or PNG of the prescription.')
+    if (f.size > 10 * 1024 * 1024) return setError('That file is over 10 MB. Please upload a smaller image.')
     setError(null)
     setFile(f)
     const reader = new FileReader()
@@ -40,159 +55,149 @@ export default function UploadPage() {
     if (!file) return
     setUploading(true)
     setError(null)
-    setProgress(0)
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress(p => Math.min(p + Math.random() * 15, 90))
-    }, 300)
+    setStage(0)
+    timer.current = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 4000)
 
     try {
       const result = await uploadPrescription(file)
-      setProgress(100)
-      clearInterval(interval)
       setCurrentResult(result)
       // Phase 1: every extraction is verified before use (ARCHITECTURE_V2 §8.1),
-      // so upload lands on the review screen, not a read-only result.
-      setTimeout(() => navigate(`/review/${result.id}`), 500)
+      // so upload lands on the review screen, not a read-only view.
+      navigate(`/review/${result.id}`)
     } catch (err) {
-      clearInterval(interval)
-      // Demo mode: generate mock result
-      const mockResult = {
-        id: 'demo-' + Date.now(),
-        raw_text: 'Napa 500mg BD | Esoral 20mg OD | Montair 10mg OD',
-        confidence: 0.847,
-        medicines: [
-          { name: 'Napa', dosage: '500mg', frequency: 'BD', duration: '7 days', instructions: 'After meal', confidence: 0.92, match_score: 100, was_corrected: false, frequency_expanded: 'Twice daily' },
-          { name: 'Esoral', dosage: '20mg', frequency: 'OD', duration: '14 days', instructions: 'Before meal', confidence: 0.88, match_score: 100, was_corrected: false, frequency_expanded: 'Once daily' },
-          { name: 'Montair', dosage: '10mg', frequency: 'OD', duration: '10 days', instructions: 'At bedtime', confidence: 0.74, match_score: 95.2, was_corrected: true, original_name: 'Montiar', frequency_expanded: 'Once daily' },
-        ],
-        patient_name: 'Patient',
-        doctor_name: 'Dr. Physician',
-        date: new Date().toISOString().split('T')[0],
-        processed_at: new Date().toISOString(),
-        status: 'completed',
-      }
-      setProgress(100)
-      setCurrentResult(mockResult)
-      setTimeout(() => navigate(`/results/${mockResult.id}`), 500)
+      // Deliberately NO fabricated demo result here. A medicine list invented by
+      // the frontend after a failed request is indistinguishable from a real
+      // reading on screen, and this is the one product where that must never
+      // happen. A failure is reported as a failure.
+      setError(
+        err?.response?.data?.detail
+        ?? (err?.code === 'ECONNABORTED'
+              ? 'The read timed out. Dense pages can take a while — try again, or use a smaller image.'
+              : 'Could not reach the PrescriptAI API. Check that the backend is running on port 8000.'),
+      )
     } finally {
+      clearInterval(timer.current)
       setUploading(false)
     }
   }
 
-  const clearFile = () => { setFile(null); setPreview(null); setError(null); setProgress(0) }
+  const clearFile = () => { setFile(null); setPreview(null); setError(null); setStage(0) }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="text-center mb-10 animate-fade-in">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">
-          Scan <span className="gradient-text">Prescription</span>
-        </h1>
-        <p className="text-dark-400">Upload or photograph a handwritten prescription for AI-powered digitization</p>
-      </div>
+    <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <header className="mb-9 animate-fade-in">
+        <span className="rule-label text-care-700">Step 01</span>
+        <h1 className="mt-2 font-display text-4xl font-normal text-ink-900">Scan a prescription</h1>
+        <p className="mt-2 max-w-xl text-ink-600">
+          The page is normalised and downscaled before it leaves your machine. You will land on
+          the review screen with the original image beside every line that was read.
+        </p>
+      </header>
 
-      {/* Upload Area */}
       {!preview ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
           onDragLeave={() => setDragActive(false)}
           onDrop={handleDrop}
-          className={`glass-card p-12 text-center cursor-pointer transition-all duration-300 animate-slide-up ${
-            dragActive ? 'border-primary-500 bg-primary-500/5 scale-[1.02]' : 'hover:border-primary-500/30'
-          }`}
           onClick={() => document.getElementById('file-input').click()}
+          className={`animate-slide-up cursor-pointer rounded-xl border-2 border-dashed p-12 text-center transition-all duration-200 ${
+            dragActive
+              ? 'border-care-500 bg-care-50'
+              : 'border-ink-300 bg-white/70 hover:border-care-400 hover:bg-white'
+          }`}
         >
           <input id="file-input" type="file" accept="image/*" className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])} />
+                 onChange={(e) => handleFile(e.target.files?.[0])} />
 
-          <div className="w-20 h-20 rounded-2xl glass mx-auto mb-6 flex items-center justify-center">
-            <Upload size={36} className={`transition-colors ${dragActive ? 'text-primary-400' : 'text-dark-400'}`} />
-          </div>
+          <span className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-2xl border border-care-200 bg-care-50">
+            <UploadCloud size={34} className={dragActive ? 'text-care-700' : 'text-care-500'} />
+          </span>
 
-          <h3 className="text-xl font-semibold text-white mb-2">
-            {dragActive ? 'Drop your prescription here' : 'Upload Prescription Image'}
-          </h3>
-          <p className="text-dark-400 text-sm mb-6">Drag & drop or click to select • JPG, PNG • Max 10MB</p>
+          <h2 className="font-display text-2xl font-semibold text-ink-900">
+            {dragActive ? 'Drop it here' : 'Drop a prescription image'}
+          </h2>
+          <p className="mt-2 text-sm text-ink-500">or click to browse · JPG or PNG · up to 10 MB</p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button className="btn-primary flex items-center gap-2">
-              <FileUp size={18} /> Choose File
-            </button>
-            <button className="btn-secondary flex items-center gap-2"
-              onClick={(e) => { e.stopPropagation(); /* Camera capture would go here */ }}>
-              <Camera size={18} /> Use Camera
-            </button>
-          </div>
+          <span className="btn-primary mt-7"><FileUp size={18} /> Choose a file</span>
         </div>
       ) : (
         <div className="animate-slide-up">
-          {/* Preview */}
-          <div className="glass-card relative overflow-hidden mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Image size={20} className="text-primary-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">{file?.name}</p>
-                  <p className="text-xs text-dark-400">{(file?.size / 1024).toFixed(1)} KB</p>
+          <div className="card-tight mb-5 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-ink-200 px-5 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <ImageIcon size={18} className="shrink-0 text-care-600" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink-900">{file?.name}</p>
+                  <p className="data text-xs text-ink-500">{(file?.size / 1024).toFixed(0)} KB</p>
                 </div>
               </div>
-              <button onClick={clearFile} className="p-2 rounded-lg hover:bg-white/5 text-dark-400 hover:text-white transition-colors">
+              <button onClick={clearFile} disabled={isUploading}
+                      className="rounded-lg p-2 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 disabled:opacity-40"
+                      aria-label="Remove image">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="rounded-xl overflow-hidden bg-dark-800/50 flex items-center justify-center" style={{ maxHeight: '400px' }}>
-              <img src={preview} alt="Prescription preview" className="max-w-full max-h-[400px] object-contain" />
+            <div className="bg-graph flex items-center justify-center bg-ink-50 p-4">
+              <img src={preview} alt="Prescription preview"
+                   className="max-h-[420px] max-w-full rounded-lg border border-ink-200 bg-white object-contain shadow-clinical" />
             </div>
           </div>
 
-          {/* Progress bar */}
           {isUploading && (
-            <div className="glass-card mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Loader2 size={20} className="text-primary-400 animate-spin" />
-                <span className="text-sm text-dark-200">Processing prescription with AI...</span>
-                <span className="text-sm font-mono text-primary-400 ml-auto">{Math.round(progress)}%</span>
+            <div className="card mb-5">
+              <div className="flex items-center gap-3">
+                <Loader2 size={18} className="animate-spin text-care-700" />
+                <span className="text-sm font-medium text-ink-800">{STAGES[stage]}</span>
               </div>
-              <div className="w-full h-2 bg-dark-800 rounded-full overflow-hidden">
-                <div className="h-full gradient-bg rounded-full transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
+              {/* Indeterminate: it says work is happening, and claims nothing else. */}
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-100">
+                <div className="h-full w-1/3 rounded-full bg-care-600 animate-sweep" />
               </div>
+              <ol className="mt-4 space-y-1.5">
+                {STAGES.map((s, i) => (
+                  <li key={s} className={`flex items-center gap-2 text-xs ${i <= stage ? 'text-ink-700' : 'text-ink-400'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${i < stage ? 'bg-care-600' : i === stage ? 'bg-care-500 animate-vitals' : 'bg-ink-300'}`} />
+                    {s}
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
 
-          {/* Error */}
           {error && (
-            <div className="glass-card mb-6 border-red-500/30 bg-red-500/5">
-              <div className="flex items-center gap-3 text-red-400">
-                <AlertCircle size={20} />
-                <span className="text-sm">{error}</span>
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-vital-200 bg-vital-50 px-4 py-3.5 text-sm text-vital-800">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">The page was not processed.</p>
+                <p className="mt-0.5">{error}</p>
+                <p className="mt-1.5 text-xs text-vital-700">
+                  Nothing was recorded. No medicines are shown because none were read — this
+                  screen will not invent a result to fill the space.
+                </p>
               </div>
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-4">
-            <button onClick={handleSubmit} disabled={isUploading}
-              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-              {isUploading ? <><Loader2 size={18} className="animate-spin" /> Processing...</>
-                : <><Upload size={18} /> Process Prescription</>}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button onClick={handleSubmit} disabled={isUploading} className="btn-primary flex-1">
+              {isUploading
+                ? <><Loader2 size={18} className="animate-spin" /> Reading…</>
+                : <><ScanLine size={18} /> Read this prescription</>}
             </button>
-            <button onClick={clearFile} disabled={isUploading} className="btn-secondary px-6">Change Image</button>
+            <button onClick={clearFile} disabled={isUploading} className="btn-secondary">
+              Choose another
+            </button>
           </div>
         </div>
       )}
 
-      {/* Tips */}
-      <div className="mt-10 grid sm:grid-cols-3 gap-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-        {[
-          { title: 'Good Lighting', desc: 'Ensure the prescription is well-lit without shadows' },
-          { title: 'Flat Surface', desc: 'Place prescription on a flat, contrasting background' },
-          { title: 'Full View', desc: 'Capture the entire prescription including medicine names' },
-        ].map(({ title, desc }) => (
-          <div key={title} className="glass-card py-4 px-5">
-            <h4 className="text-sm font-medium text-white mb-1">{title}</h4>
-            <p className="text-xs text-dark-400">{desc}</p>
+      <div className="mt-10 grid animate-slide-up gap-4 sm:grid-cols-3" style={{ animationDelay: '.15s' }}>
+        {TIPS.map(({ icon: Icon, title, desc }) => (
+          <div key={title} className="card">
+            <Icon size={18} className="text-care-600" />
+            <h3 className="mt-3 font-display text-base font-semibold text-ink-900">{title}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-600">{desc}</p>
           </div>
         ))}
       </div>

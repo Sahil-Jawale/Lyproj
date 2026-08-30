@@ -20,7 +20,7 @@
 ## 🏗️ Architecture
 
 ```
-medscript/
+prescriptai/
 ├── ml_pipeline/          # ML models & preprocessing
 │   ├── preprocessing/    # Image deskew, denoise, binarise, crop
 │   ├── ocr/              # TrOCR fine-tuning & inference

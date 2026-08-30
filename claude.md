@@ -40,6 +40,98 @@ Spend so far: **$0.0686 across 2 calls**, cap $5.00.
 
 ---
 
+## Session 6 — UI: rename to PrescriptAI, and a clinical theme
+
+The frontend still said **MedScript**, and it still looked like every other
+gradient-on-black AI dashboard: purple-blue glassmorphism, glowing gradient
+text, blurred blobs. It also disagreed with itself — `Layout` painted
+`bg-dark-900` while `MedicineCard`, `ResultsPage` and `ReviewPage` had already
+been written light, so the clinical screens were slate-900 text on white cards
+floating on a black page.
+
+### The theme
+
+Rebuilt as a **light clinical** system in `tailwind.config.js` + `index.css`:
+
+| token | value | role |
+|---|---|---|
+| `paper` | `#F5F4EF` | warm chart-paper ground, not a dashboard black |
+| `care-*` | teal `#1F8375` family | the one accent; every affordance is keyed to it |
+| `vital-*` | `#C4353A` family | reserved for actual risk — never decoration |
+| `ink-*` | warm greenish slate | text and hairline rules |
+
+Newsreader (serif) for headings, Inter for UI, JetBrains Mono for anything
+numeric. Flat cards with hairline borders and a small shadow replaced `.glass`;
+`.gradient-text` and `.gradient-bg` are gone entirely. The mark is **℞** with a
+pulsing vitals dot.
+
+### The background animation
+
+`components/MedicalBackdrop.jsx` — drifting graph paper, two **ECG traces that
+draw themselves** across the page (a real PQRST polyline generated in JS, drawn
+via `pathLength` + `stroke-dashoffset`), soft clinical washes, and a few
+drifting pharmacy glyphs. It is `pointer-events-none`, `aria-hidden`, and every
+animation in the app is killed wholesale under `prefers-reduced-motion`. None of
+it carries information.
+
+### Three things were broken, not just ugly
+
+Retheming meant reading every page, and three of them did not work against the
+real API at all:
+
+**1. `UploadPage` fabricated a prescription when the request failed.** The catch
+block built a mock result — Napa / Esoral / Montair, BD brands from the deleted
+dataset — and navigated to the results screen with it. On screen it was
+indistinguishable from a real reading. Deleted; a failure now says it failed and
+records nothing. The same fabrication existed in `InteractionsPage`, which had a
+hardcoded `LOCAL_INTERACTIONS` table it fell back to — a **safety verdict
+invented by the browser**, which is the exact confusion this project exists to
+prevent. Also deleted.
+
+**2. `HistoryPage` would crash on real records.** It filtered on
+`rx.doctor_name.toLowerCase()`; the API returns `prescriber_name`. It also read
+`rx.confidence` and `m.name`, which are `overall_legibility` and `brand`. It
+only ever looked fine because a 12-item demo fixture shadowed the real call.
+
+**3. `DashboardPage` rendered `NaN%`.** It merged `/api/stats` over a demo
+object, but the real payload has `coverage` / `reviewed` / `corrections_logged`,
+not `avg_confidence` / `interaction_alerts`. Its charts were a fabricated
+six-month series and a falling **"OCR Error Rate (CER%)"** curve for TrOCR — a
+model that was cut from the serving path two sessions ago.
+
+Both pages now compute everything from real records: outcome mix, verification
+mix, per-page legibility, top resolved ingredients, screened-vs-skipped counts
+and live spend against the cap. The headline stat is **coverage**, not accuracy.
+
+### Copy corrected to match the pipeline
+
+The homepage was still advertising the old system: "80%+ accuracy using
+fine-tuned TrOCR", "78+ medicine names", "BD Prescription Dataset with 4,680
+word segments", "200+ interaction rules". Replaced with what S0–S5 actually do —
+239,541 Indian brands, NLEM 2022 as the per-ingredient gate, 180 cited rules
+across 212 drugs, verbatim reading, and a clinician sign-off on every page.
+
+`InteractionsPage`'s autocomplete was 78 hardcoded **Bangladeshi brand names**,
+while `/api/interactions/check` screens by **generic**. Every suggestion it
+offered was guaranteed to return nothing. Replaced with
+`src/data/ddiDrugs.js` — the 210 generics generated from `DDI Database.json`
+itself, so the list cannot drift from the graph.
+
+### Also renamed
+
+`web_app/index.html` (title, meta, favicon), the navbar, `backend/config/*`
+`APP_NAME`, `pharmacy_dashboard` title strings, the README tree label. **Not**
+renamed: `docker-compose.yml` database name/user/password and the
+`sqlite:///medscript.db` default — renaming those breaks existing deployments
+and orphans the current `prescriptai.db`.
+
+Verified: `vite build` passes, every route module and the stylesheet compile
+clean through the dev server, and the generated CSS contains all new tokens.
+`pharmacy_dashboard` is renamed but **not** rethemed — it is still on the old
+dark palette.
+
+---
+
 ## Session 1 — Track A implementation
 
 ### Environment

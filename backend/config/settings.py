@@ -1,5 +1,5 @@
 """
-MedScript Backend — Configuration Management
+PrescriptAI Backend — Configuration Management
 Uses environment variables with sensible defaults for prototype.
 """
 import os
@@ -10,7 +10,7 @@ class Settings:
     """Application settings with environment variable overrides."""
 
     # Application
-    APP_NAME: str = os.getenv("APP_NAME", "MedScript API")
+    APP_NAME: str = os.getenv("APP_NAME", "PrescriptAI API")
     APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 

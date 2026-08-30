@@ -32,8 +32,8 @@ export default function ResultsPage() {
   const unresolved = useMemo(
     () => (rx?.medicines ?? []).filter((m) => m.needs_hard_confirmation).length, [rx])
 
-  if (error) return <div className="mx-auto max-w-3xl p-8 text-slate-700">{error}</div>
-  if (!rx) return <div className="flex items-center gap-2 p-8 text-slate-600"><Loader2 className="h-5 w-5 animate-spin" />Loading…</div>
+  if (error) return <div className="mx-auto max-w-3xl p-8 text-ink-700">{error}</div>
+  if (!rx) return <div className="flex items-center gap-2 p-8 text-ink-600"><Loader2 className="h-5 w-5 animate-spin" />Loading…</div>
 
   const risk = rx.interactions?.overall_risk ?? 'none'
 
@@ -41,17 +41,17 @@ export default function ResultsPage() {
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Extraction result</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="font-display text-3xl font-normal text-ink-900">Extraction result</h1>
+          <p className="mt-1 text-sm text-ink-600">
             {rx.patient_name && <>Patient <strong>{rx.patient_name}</strong> · </>}
             {rx.prescriber_name && <>{rx.prescriber_name} · </>}
             {rx.date && <>{rx.date} · </>}
             legibility {Math.round((rx.overall_legibility ?? 0) * 100)}%
-            {rx.reviewed && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">reviewed</span>}
+            {rx.reviewed && <span className="ml-2 rounded-full bg-care-100 px-2 py-0.5 text-xs font-medium text-care-800">reviewed</span>}
           </p>
         </div>
         <button type="button" onClick={() => navigate(`/review/${rx.id}`)}
-          className="flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2.5 font-semibold text-white hover:bg-sky-800">
+          className="btn-primary py-2.5 text-sm">
           <Stethoscope className="h-4 w-4" />{rx.reviewed ? 'Review again' : 'Verify as doctor'}
         </button>
       </div>
@@ -62,7 +62,7 @@ export default function ResultsPage() {
       </div>
 
       {unresolved > 0 && (
-        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+        <div className="mt-3 rounded-xl border border-vital-200 bg-vital-50 px-4 py-3 text-sm text-vital-900">
           <strong>{unresolved}</strong> item{unresolved > 1 ? 's need' : ' needs'} prescriber
           confirmation. Coverage is deliberately incomplete rather than guessed.
         </div>
@@ -71,13 +71,13 @@ export default function ResultsPage() {
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="space-y-3">
           {rx.medicines.length === 0
-            ? <p className="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">
+            ? <p className="rounded-xl border border-ink-200 bg-white p-6 text-ink-600 shadow-clinical">
                 No medicines reported on this page{rx.document_type === 'not_a_prescription' && ' — it does not appear to be a prescription'}.
               </p>
             : rx.medicines.map((m) => <MedicineCard key={m.index} medicine={m} imageSrc={src} />)}
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-800">
+          <div className="rounded-xl border border-ink-200 bg-white p-4 shadow-clinical">
+            <h2 className="text-sm font-semibold text-ink-800">
               Interaction check — risk: <span className="uppercase">{risk}</span>
             </h2>
             {(rx.interactions?.interactions ?? []).map((i, k) => (
@@ -85,9 +85,9 @@ export default function ResultsPage() {
                 <p className="font-semibold" style={{ color: i.severity_color }}>
                   {i.severity.toUpperCase()} — {i.drug_a} + {i.drug_b}
                 </p>
-                {i.effect && <p className="mt-1 text-sm text-slate-700">{i.effect}</p>}
-                {i.safer_alternative && <p className="mt-1 text-sm text-emerald-800">Safer: {i.safer_alternative}</p>}
-                {i.reference && <p className="mt-1 text-xs italic text-slate-500">{i.reference}</p>}
+                {i.effect && <p className="mt-1 text-sm text-ink-700">{i.effect}</p>}
+                {i.safer_alternative && <p className="mt-1 text-sm text-care-800">Safer: {i.safer_alternative}</p>}
+                {i.reference && <p className="mt-1 text-xs italic text-ink-500">{i.reference}</p>}
               </div>
             ))}
             {(rx.interactions?.skipped ?? []).length > 0 && (
@@ -102,9 +102,9 @@ export default function ResultsPage() {
         </section>
 
         <aside>
-          <h2 className="mb-2 text-sm font-semibold text-slate-800">Original</h2>
-          {src && <img src={src} alt="Uploaded prescription" className="w-full rounded-xl border border-slate-300" />}
-          <Link to="/history" className="mt-3 block text-sm text-sky-800 underline underline-offset-2">All prescriptions</Link>
+          <h2 className="mb-2 text-sm font-semibold text-ink-800">Original</h2>
+          {src && <img src={src} alt="Uploaded prescription" className="w-full rounded-xl border border-ink-200 bg-white p-1 shadow-clinical" />}
+          <Link to="/history" className="mt-3 block text-sm text-care-800 underline underline-offset-2">All prescriptions</Link>
         </aside>
       </div>
     </div>

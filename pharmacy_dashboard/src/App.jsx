@@ -50,7 +50,7 @@ function Sidebar({ active, setActive, collapsed, toggle }) {
     <aside className={`fixed left-0 top-0 h-full z-40 glass border-r border-white/5 transition-all duration-300 ${collapsed ? 'w-16' : 'w-60'}`}>
       <div className="flex items-center gap-3 p-4 border-b border-white/5">
         <div className="w-9 h-9 rounded-xl gradient-bg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P</div>
-        {!collapsed && <div><span className="text-sm font-bold gradient-text">Pharmacy</span><p className="text-[10px] text-dark-400">MedScript Dashboard</p></div>}
+        {!collapsed && <div><span className="text-sm font-bold gradient-text">Pharmacy</span><p className="text-[10px] text-dark-400">PrescriptAI Dashboard</p></div>}
         <button onClick={toggle} className="ml-auto text-dark-400 hover:text-white p-1">{collapsed ? <Menu size={18}/> : <X size={18}/>}</button>
       </div>
       <nav className="p-2 space-y-1 mt-2">

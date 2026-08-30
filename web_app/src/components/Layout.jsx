@@ -1,19 +1,34 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import Navbar from './Navbar'
+import MedicalBackdrop from './MedicalBackdrop'
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-dark-900">
-      {/* Ambient background effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600/10 rounded-full blur-[100px]" />
-        <div className="absolute top-1/3 -left-40 w-96 h-96 bg-accent-600/8 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-72 h-72 bg-primary-500/5 rounded-full blur-[100px]" />
-      </div>
+    <div className="relative min-h-screen bg-paper">
+      <MedicalBackdrop />
       <Navbar />
-      <main className="relative z-10 pt-20 pb-12">
+      <main className="relative z-10 pb-16 pt-24">
         <Outlet />
       </main>
+      <Footer />
     </div>
+  )
+}
+
+function Footer() {
+  return (
+    <footer className="relative z-10 border-t border-ink-200 bg-white/70">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-xs text-ink-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <p>
+          <span className="font-display text-sm font-semibold text-ink-800">PrescriptAI</span>
+          {' '}— decision support only. Every reading is verified by a clinician before use.
+        </p>
+        <div className="flex items-center gap-4">
+          <Link to="/upload" className="hover:text-care-700">Scan</Link>
+          <Link to="/interactions" className="hover:text-care-700">Interactions</Link>
+          <Link to="/history" className="hover:text-care-700">Records</Link>
+        </div>
+      </div>
+    </footer>
   )
 }

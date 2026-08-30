@@ -1,112 +1,155 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, Search, ChevronRight, Pill, Eye, Calendar, Filter } from 'lucide-react'
+import { Search, ChevronRight, ScanLine, FileX2, Loader2, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { getPrescriptions } from '../services/api'
 
-const DEMO_HISTORY = Array.from({ length: 12 }, (_, i) => ({
-  id: `hist-${i}`,
-  date: `2025-11-${String(25 - i * 2).padStart(2, '0')}`,
-  doctor_name: ['Dr. Sharma','Dr. Patel','Dr. Roy','Dr. Das','Dr. Khan'][i % 5],
-  confidence: +(0.72 + Math.random() * 0.24).toFixed(3),
-  medicines: Array.from({ length: 2 + (i % 3) }, (_, j) => ({
-    name: ["Napa","Esoral","Montair","Azithrocin","Fexofast","Rivotril","Ace","Diflu","Baclofen","Metro"][((i * 3) + j) % 10],
-    dosage: ["500mg","20mg","10mg","250mg","120mg"][j % 5],
-    frequency: ["BD","OD","TDS","1-0-1"][j % 4],
-  })),
-  status: 'completed',
-}))
+/**
+ * The record shelf.
+ *
+ * There is deliberately no demo dataset behind this screen. An empty shelf is
+ * an honest answer; a shelf of invented patients that looks identical to real
+ * records is not — and the previous fixture used field names (`doctor_name`,
+ * `confidence`, `medicines[].name`) the API does not return, so it also broke
+ * the moment a real record arrived.
+ */
+
+const RISK_TONE = {
+  none:            'severity-none',
+  minor:           'severity-minor',
+  moderate:        'severity-moderate',
+  severe:          'severity-severe',
+  contraindicated: 'severity-contraindicated',
+}
 
 export default function HistoryPage() {
-  const [prescriptions, setPrescriptions] = useState(DEMO_HISTORY)
+  const [prescriptions, setPrescriptions] = useState([])
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const data = await getPrescriptions(30)
-        if (data.length > 0) setPrescriptions(data)
-      } catch { /* use demo data */ }
-      setLoading(false)
-    }
-    load()
+    getPrescriptions(50)
+      .then(setPrescriptions)
+      .catch((e) => setError(e?.response?.data?.detail ?? 'Could not reach the PrescriptAI API.'))
+      .finally(() => setLoading(false))
   }, [])
 
-  const filtered = prescriptions.filter(rx =>
-    rx.doctor_name.toLowerCase().includes(search.toLowerCase()) ||
-    rx.medicines.some(m => m.name.toLowerCase().includes(search.toLowerCase())) ||
-    rx.date.includes(search)
+  const q = search.trim().toLowerCase()
+  const filtered = !q ? prescriptions : prescriptions.filter((rx) =>
+    [rx.prescriber_name, rx.patient_name, rx.date, ...(rx.medicines ?? []).map((m) => m.brand ?? m.raw_reading)]
+      .filter(Boolean)
+      .some((s) => String(s).toLowerCase().includes(q)),
   )
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 animate-fade-in">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <header className="mb-8 flex animate-fade-in flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Prescription <span className="gradient-text">History</span></h1>
-          <p className="text-dark-400 text-sm">{filtered.length} prescriptions on record</p>
+          <span className="rule-label text-care-700">Records</span>
+          <h1 className="mt-2 font-display text-4xl font-normal text-ink-900">Prescription history</h1>
+          <p className="mt-1 text-sm text-ink-600">
+            {loading ? 'Loading…' : `${filtered.length} page${filtered.length === 1 ? '' : 's'} on record`}
+          </p>
         </div>
-        <Link to="/upload" className="btn-primary flex items-center gap-2 text-sm">
-          <Pill size={16} /> New Scan
-        </Link>
+        <Link to="/upload" className="btn-primary py-2.5 text-sm"><ScanLine size={16} /> New scan</Link>
+      </header>
+
+      <div className="relative mb-6 animate-slide-up">
+        <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-400" />
+        <input
+          type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by prescriber, patient, medicine or date…"
+          className="input-field py-3 pl-11"
+        />
       </div>
 
-      {/* Search */}
-      <div className="glass-card mb-6 p-3 animate-slide-up">
-        <div className="relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-400" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by doctor, medicine, or date..."
-            className="input-field pl-11 py-2.5" />
+      {loading && (
+        <div className="flex items-center gap-2 p-8 text-ink-600">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading records…
         </div>
-      </div>
+      )}
 
-      {/* Timeline */}
-      <div className="space-y-4">
-        {filtered.map((rx, i) => (
-          <Link key={rx.id} to={`/results/${rx.id}`}
-            className="glass-card flex items-center gap-4 group animate-slide-up cursor-pointer"
-            style={{ animationDelay: `${Math.min(i, 8) * 0.05}s` }}>
-            {/* Date badge */}
-            <div className="hidden sm:flex flex-col items-center min-w-[60px]">
-              <span className="text-2xl font-bold gradient-text">{rx.date.split('-')[2]}</span>
-              <span className="text-[10px] uppercase tracking-wider text-dark-400">
-                {new Date(rx.date + 'T00:00:00').toLocaleString('en', { month: 'short' })}
-              </span>
-            </div>
+      {error && (
+        <div className="card border-vital-200 bg-vital-50 text-sm text-vital-800">{error}</div>
+      )}
 
-            {/* Divider */}
-            <div className="hidden sm:block w-px h-16 bg-dark-700" />
-
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-sm font-medium text-white">{rx.doctor_name}</span>
-                <span className="text-xs text-dark-500 sm:hidden">{rx.date}</span>
-                <span className="ml-auto text-xs font-mono text-primary-400">{Math.round(rx.confidence * 100)}%</span>
+      <div className="space-y-3">
+        {filtered.map((rx, i) => {
+          const risk = rx.interactions?.overall_risk ?? 'none'
+          const day = rx.date || (rx.created_at ?? '').slice(0, 10)
+          return (
+            <Link
+              key={rx.id} to={`/results/${rx.id}`}
+              className="card-link flex animate-slide-up items-center gap-4"
+              style={{ animationDelay: `${Math.min(i, 8) * 0.04}s` }}
+            >
+              <div className="hidden w-16 shrink-0 flex-col items-center border-r border-dashed border-ink-200 pr-4 sm:flex">
+                <span className="data text-2xl font-bold text-care-700">
+                  {String(day).split(/[-/]/).pop()?.slice(0, 2) || '—'}
+                </span>
+                <span className="rule-label mt-0.5">{monthOf(rx)}</span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {rx.medicines.map((m, j) => (
-                  <span key={j} className="text-xs px-2 py-0.5 rounded-md bg-dark-800/80 text-dark-300 border border-dark-700">
-                    {m.name} {m.dosage}
+
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-ink-900">
+                    {rx.prescriber_name || 'Prescriber not read'}
                   </span>
-                ))}
-              </div>
-            </div>
+                  {rx.patient_name && <span className="text-sm text-ink-500">· {rx.patient_name}</span>}
+                  <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${RISK_TONE[risk] ?? RISK_TONE.none}`}>
+                    {risk === 'none' ? 'no interactions' : `${risk} risk`}
+                  </span>
+                </div>
 
-            {/* Arrow */}
-            <ChevronRight size={18} className="text-dark-500 group-hover:text-primary-400 transition-colors flex-shrink-0" />
-          </Link>
-        ))}
+                <div className="flex flex-wrap gap-1.5">
+                  {(rx.medicines ?? []).map((m, j) => (
+                    <span key={j} className={`chip ${m.outcome === 'illegible' ? 'border-dashed text-ink-500' : ''}`}>
+                      {m.brand ?? (m.outcome === 'illegible' ? 'unreadable line' : m.raw_reading)}
+                      {m.dosage && <span className="data text-ink-500">{m.dosage}</span>}
+                    </span>
+                  ))}
+                  {(rx.medicines ?? []).length === 0 && (
+                    <span className="chip border-dashed text-ink-500">no medicines reported</span>
+                  )}
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink-500">
+                  <span className="data">legibility {Math.round((rx.overall_legibility ?? 0) * 100)}%</span>
+                  {rx.reviewed
+                    ? <span className="inline-flex items-center gap-1 text-care-700"><CheckCircle2 size={12} /> reviewed</span>
+                    : <span className="inline-flex items-center gap-1 text-amber-700"><ShieldAlert size={12} /> awaiting review</span>}
+                  <span className="sm:hidden">{day}</span>
+                </div>
+              </div>
+
+              <ChevronRight size={18} className="shrink-0 text-ink-300" />
+            </Link>
+          )
+        })}
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-20 text-dark-400">
-          <Clock size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg">No prescriptions found</p>
-          <p className="text-sm mt-1">Upload your first prescription to get started</p>
+      {!loading && !error && filtered.length === 0 && (
+        <div className="card py-16 text-center">
+          <FileX2 size={40} className="mx-auto text-ink-300" />
+          <p className="mt-4 font-display text-xl text-ink-800">
+            {prescriptions.length === 0 ? 'No prescriptions on record yet' : 'Nothing matches that search'}
+          </p>
+          <p className="mt-1 text-sm text-ink-500">
+            {prescriptions.length === 0
+              ? 'Scan a page and it will appear here once it has been read.'
+              : 'Try a prescriber, patient, medicine name or date.'}
+          </p>
+          {prescriptions.length === 0 && (
+            <Link to="/upload" className="btn-primary mt-6"><ScanLine size={18} /> Scan a prescription</Link>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+function monthOf(rx) {
+  const raw = rx.created_at ?? rx.date
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en', { month: 'short' })
 }

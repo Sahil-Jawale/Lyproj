@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,73 +7,160 @@
 @layer base {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
+    background-color: theme('colors.paper');
+    color: theme('colors.ink.800');
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #1e293b; }
-  ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 3px; }
+
+  /* Serif headings. A prescription pad and a medical journal are both set in
+     serif; it is the single cheapest signal that this is not another
+     gradient-on-black AI dashboard. */
+  h1, h2, h3 { font-family: 'Newsreader', Georgia, serif; letter-spacing: -0.01em; }
+
+  ::selection { background: theme('colors.care.200'); color: theme('colors.care.900'); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: theme('colors.ink.100'); }
+  ::-webkit-scrollbar-thumb { background: theme('colors.ink.300'); border-radius: 99px; border: 3px solid theme('colors.ink.100'); }
+  ::-webkit-scrollbar-thumb:hover { background: theme('colors.care.400'); }
+
+  :focus-visible { outline: 2px solid theme('colors.care.600'); outline-offset: 2px; }
 }
 
 @layer components {
-  .glass {
-    background: rgba(255,255,255,0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.08);
+  /* ---- surfaces ------------------------------------------------------- */
+
+  .card {
+    @apply rounded-xl border border-ink-200 bg-white p-5 shadow-clinical;
   }
-  .glass-card {
-    @apply glass rounded-2xl p-6 transition-all duration-300;
+  .card-tight { @apply rounded-xl border border-ink-200 bg-white shadow-clinical; }
+
+  .card-link {
+    @apply card transition-all duration-200;
   }
-  .glass-card:hover {
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(59,130,246,0.3);
+  .card-link:hover {
+    @apply border-care-300 shadow-clinical-lg;
     transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(59,130,246,0.1);
   }
-  .gradient-text {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #3b82f6, #14b8a6);
+
+  /* A card that reads as a page from a prescription pad: ruled edge on the
+     left, faint horizontal rules behind the content. */
+  .pad {
+    @apply relative rounded-xl border border-ink-200 bg-white shadow-clinical;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0 31px,
+      rgba(31,131,117,.07) 31px 32px
+    );
   }
-  .gradient-bg {
-    background: linear-gradient(135deg, #1a56db, #0d9488);
+  .pad::before {
+    content: '';
+    @apply absolute inset-y-3 left-0 w-[3px] rounded-full bg-care-500/70;
   }
+
+  /* ---- type ----------------------------------------------------------- */
+
+  .display { @apply font-display font-normal text-ink-900; }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-care-200 bg-care-50
+           px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-care-800;
+  }
+  .rule-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500;
+  }
+  .data { @apply font-mono tabular-nums; }
+
+  /* ---- controls ------------------------------------------------------- */
+
   .btn-primary {
-    @apply px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300;
-    background: linear-gradient(135deg, #1a56db, #3b82f6);
-    box-shadow: 0 4px 15px rgba(59,130,246,0.3);
-  }
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(59,130,246,0.4);
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-care-700 px-5 py-3
+           font-semibold text-white shadow-clinical transition-all duration-200
+           hover:bg-care-800 active:translate-y-px
+           disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-care-700;
   }
   .btn-secondary {
-    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-300 border border-dark-600 text-dark-200;
-    background: rgba(255,255,255,0.05);
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink-300
+           bg-white px-5 py-3 font-semibold text-ink-700 transition-all duration-200
+           hover:border-care-400 hover:text-care-800
+           disabled:cursor-not-allowed disabled:opacity-40;
   }
-  .btn-secondary:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: #3b82f6;
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+           text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900;
   }
-  .severity-none { @apply bg-green-500/10 text-green-400 border-green-500/30; }
-  .severity-minor { @apply bg-lime-500/10 text-lime-400 border-lime-500/30; }
-  .severity-moderate { @apply bg-amber-500/10 text-amber-400 border-amber-500/30; }
-  .severity-severe { @apply bg-red-500/10 text-red-400 border-red-500/30; }
-  .severity-contraindicated { @apply bg-red-700/10 text-red-500 border-red-600/30; }
-  .stat-card {
-    @apply glass-card flex flex-col gap-2;
+  .btn-confirm {
+    @apply inline-flex w-full items-center justify-center gap-2 rounded-lg bg-care-700
+           px-4 py-3 font-semibold text-white shadow-clinical transition-colors
+           hover:bg-care-800 disabled:opacity-50;
   }
+
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl bg-dark-800/50 border border-dark-600 text-dark-100 placeholder-dark-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 transition-all;
+    @apply w-full rounded-lg border border-ink-300 bg-white px-4 py-3 text-ink-900
+           placeholder-ink-400 transition-all
+           focus:border-care-500 focus:outline-none focus:ring-4 focus:ring-care-500/15;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-ink-50
+           px-2.5 py-1 text-xs font-medium text-ink-700;
+  }
+
+  /* ---- clinical status ------------------------------------------------ */
+
+  .severity-none           { @apply border-care-200  bg-care-50   text-care-800; }
+  .severity-minor          { @apply border-lime-300  bg-lime-50   text-lime-900; }
+  .severity-moderate       { @apply border-amber-300 bg-amber-50  text-amber-900; }
+  .severity-severe         { @apply border-vital-300 bg-vital-50  text-vital-800; }
+  .severity-contraindicated{ @apply border-vital-400 bg-vital-100 text-vital-900; }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl border border-ink-200 bg-white p-5 shadow-clinical;
+  }
+  /* Hairline of clinical teal along the top edge — the visual grammar of a
+     patient chart, not a gradient blob. */
+  .stat-card::after {
+    content: '';
+    @apply absolute inset-x-0 top-0 h-[3px] bg-care-600;
   }
 }
 
 @layer utilities {
-  .animate-in {
-    animation: fadeIn 0.5s ease-out, slideUp 0.5s ease-out;
+  /* Faint graph paper. Sits under everything, gives the page the texture of a
+     printed chart rather than a void. */
+  .bg-graph {
+    background-image:
+      linear-gradient(rgba(31,131,117,.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31,131,117,.055) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .bg-graph-lg {
+    background-image:
+      linear-gradient(rgba(31,131,117,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31,131,117,.05) 1px, transparent 1px);
+    background-size: 120px 120px;
+  }
+
+  .animate-in { animation: fadeIn .5s ease-out, slideUp .5s ease-out; }
+
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+}
+
+/* Every animation on this site is decoration. None of it carries meaning that
+   is lost when it is switched off, so switch all of it off for anyone who has
+   asked the OS not to animate things. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 }

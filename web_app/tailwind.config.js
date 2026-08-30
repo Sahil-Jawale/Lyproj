@@ -4,30 +4,85 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        primary: { 50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#1a56db',700:'#1e40af',800:'#1e3a8a',900:'#1e2756' },
-        accent: { 50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',300:'#5eead4',400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a' },
-        dark: { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617' },
+        // Warm chart-paper ground. Not a dashboard black, not a pure white lab.
+        paper: '#F5F4EF',
+        // "care" — the clinical teal the whole product is keyed to.
+        care: {
+          50:'#EAF5F2',100:'#CFE9E2',200:'#A3D6CA',300:'#6FBDAD',400:'#3D9F8E',
+          500:'#1F8375',600:'#166B60',700:'#12564E',800:'#0F443E',900:'#0B302C',
+        },
+        // "vital" — the red of a crash cart. Reserved for real risk.
+        vital: {
+          50:'#FDF1F1',100:'#FADEDE',200:'#F3BCBC',300:'#E89191',400:'#D96565',
+          500:'#C4353A',600:'#A72830',700:'#8A1F27',800:'#6E1A20',900:'#521319',
+        },
+        // Warm greenish slate for text and rules — softer than Tailwind slate.
+        ink: {
+          50:'#F7F8F7',100:'#EEF1F0',200:'#DFE4E3',300:'#C5CDCB',400:'#96A19E',
+          500:'#6C7876',600:'#4E5A58',700:'#3A4543',800:'#26302E',900:'#141C1B',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Newsreader', 'Georgia', 'Times New Roman', 'serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
+      boxShadow: {
+        clinical: '0 1px 2px rgba(16,32,29,.05), 0 10px 30px -18px rgba(16,32,29,.28)',
+        'clinical-lg': '0 2px 4px rgba(16,32,29,.05), 0 22px 48px -26px rgba(16,32,29,.35)',
+        inset: 'inset 0 1px 0 rgba(255,255,255,.7)',
       },
       animation: {
-        'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.5s ease-out',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
+        'fade-in': 'fadeIn .5s ease-out both',
+        'slide-up': 'slideUp .55s cubic-bezier(.2,.7,.3,1) both',
+        // Background motion. All of it is decorative and all of it is disabled
+        // under prefers-reduced-motion (see index.css).
+        'ecg': 'ecg 7s linear infinite',
+        'ecg-slow': 'ecg 11s linear infinite',
+        'drift': 'drift 60s linear infinite',
+        'float-slow': 'floatY 17s ease-in-out infinite',
+        'float-slower': 'floatY 26s ease-in-out infinite',
+        'vitals': 'vitals 2.4s cubic-bezier(.4,0,.2,1) infinite',
+        'ring': 'ring 4s cubic-bezier(.2,.6,.3,1) infinite',
+        'sweep': 'sweep 3.4s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-        glow: { '0%': { boxShadow: '0 0 5px rgba(59,130,246,0.3)' }, '100%': { boxShadow: '0 0 20px rgba(59,130,246,0.6)' } },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(14px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // The trace draws itself left to right, then the whole path fades and
+        // restarts — a monitor sweep, not a loading spinner.
+        ecg: {
+          '0%':   { strokeDashoffset: '2400', opacity: '0' },
+          '6%':   { opacity: '1' },
+          '82%':  { opacity: '1' },
+          '100%': { strokeDashoffset: '0', opacity: '0' },
+        },
+        drift: { '0%': { backgroundPosition: '0 0' }, '100%': { backgroundPosition: '480px 480px' } },
+        floatY: {
+          '0%,100%': { transform: 'translateY(0) rotate(0deg)' },
+          '50%':     { transform: 'translateY(-26px) rotate(4deg)' },
+        },
+        vitals: {
+          '0%,100%': { transform: 'scale(1)', opacity: '1' },
+          '14%':     { transform: 'scale(1.28)', opacity: '.75' },
+          '28%':     { transform: 'scale(1)', opacity: '1' },
+          '42%':     { transform: 'scale(1.16)', opacity: '.85' },
+        },
+        ring: {
+          '0%':   { transform: 'scale(.7)', opacity: '.5' },
+          '100%': { transform: 'scale(1.9)', opacity: '0' },
+        },
+        sweep: {
+          '0%':   { transform: 'translateX(-110%)' },
+          '100%': { transform: 'translateX(210%)' },
+        },
       },
-      backdropBlur: { xs: '2px' },
     },
   },
   plugins: [],

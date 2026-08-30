@@ -1,5 +1,5 @@
 """
-MedScript Backend — Database Configuration
+PrescriptAI Backend — Database Configuration
 SQLAlchemy setup for SQLite (prototype) with PostgreSQL-ready connection string.
 """
 import os
