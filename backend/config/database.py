@@ -2,6 +2,8 @@
 MedScript Backend — Database Configuration
 SQLAlchemy setup for SQLite (prototype) with PostgreSQL-ready connection string.
 """
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .settings import settings
@@ -14,7 +16,7 @@ if settings.DATABASE_URL.startswith("sqlite"):
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args=connect_args,
-    echo=settings.DEBUG,
+    echo=os.getenv("SQL_ECHO", "").lower() in ("1", "true"),  # noisy; opt in
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

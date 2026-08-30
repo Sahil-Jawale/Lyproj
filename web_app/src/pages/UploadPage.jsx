@@ -52,7 +52,9 @@ export default function UploadPage() {
       setProgress(100)
       clearInterval(interval)
       setCurrentResult(result)
-      setTimeout(() => navigate(`/results/${result.id}`), 500)
+      // Phase 1: every extraction is verified before use (ARCHITECTURE_V2 §8.1),
+      // so upload lands on the review screen, not a read-only result.
+      setTimeout(() => navigate(`/review/${result.id}`), 500)
     } catch (err) {
       clearInterval(interval)
       // Demo mode: generate mock result

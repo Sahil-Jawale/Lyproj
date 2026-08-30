@@ -21,7 +21,7 @@ class Settings:
     # Database — SQLite for prototype, PostgreSQL-ready
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        f"sqlite:///{Path(__file__).resolve().parent.parent / 'medscript.db'}"
+        f"sqlite:///{Path(__file__).resolve().parent.parent / "prescriptai.db"}"
     )
 
     # CORS

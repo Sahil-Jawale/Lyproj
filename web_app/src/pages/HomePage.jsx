@@ -72,7 +72,7 @@ export default function HomePage() {
             Powered by <span className="gradient-text">Advanced AI</span>
           </h2>
           <p className="text-dark-400 max-w-xl mx-auto">
-            Every component built with state-of-the-art machine learning, from TrOCR vision transformers to BioBERT NLP.
+            Readings are verified against 239,000 Indian medicines and the NLEM 2022 essential-medicines list. Every result is reviewed by a doctor, and anything unreadable is reported as unreadable rather than guessed.
           </p>
         </div>
 

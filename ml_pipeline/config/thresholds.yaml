@@ -1,0 +1,71 @@
+# S2 vocabulary-constraint thresholds.  (docs/ARCHITECTURE_V2.md §5/S2)
+#
+# EVERY NUMBER IN THIS FILE IS A GUESS.
+#
+# They are priors, not measurements, and they are wrong in some direction we do
+# not yet know. They live in a config file rather than as constants in code
+# because calibrating them against observed doctor-correction rates is T0
+# (§16.4) — the first and cheapest tier of continuous improvement, reachable at
+# ~200 corrections with no GPU and no training.
+#
+# "Updating the policy" should be editing this file, not refactoring a pipeline.
+#
+# Do NOT tune these against the test split. Dev split only (§11.1).
+
+vocabulary:
+  # Indian brand vocabulary. 239,640 brands, zero nulls.
+  # Loaded via normalise/india_medicines.py, which builds TWO indices:
+  #   full ("Crocin 1000mg")  and  base ("Crocin")
+  # Neither alone works: full breaks "ZOFER", base breaks "Dolo 650".
+  source: india_master
+  region: IN
+  is_target_region: true
+
+nlem:
+  # NLEM 2022 is India's ESSENTIAL medicines list — deliberately selective
+  # (241 molecules + 63 aliases). "Not in NLEM" means "not on the national
+  # essential list", NOT "not a real drug": Ofloxacin and Aceclofenac are both
+  # genuinely absent. Verification is therefore PER INGREDIENT, and an
+  # unverified component is named to the reviewer rather than hidden.
+  #
+  # Only NLEM-verified ingredients enter the interaction check — that is the
+  # one place a wrong mapping becomes a wrong SAFETY VERDICT.
+  enabled: true
+
+matching:
+  # Accept outright: strong score AND clearly ahead of the runner-up.
+  confirm_score: 88
+  # How far ahead of candidate #2 the winner must be to count as unambiguous.
+  confirm_margin: 6
+  # Below this score we abstain entirely rather than emit a name.
+  abstain_score: 82
+  # How many candidates to surface for an AMBIGUOUS outcome.
+  candidate_limit: 5
+  # Measured: 19% of readings collide within confirm_margin on BRAND NAME, but
+  # 78% of those collisions resolve to the SAME composition. Comparing
+  # compositions instead of brand strings cuts reviewer burden 19% -> 4% with
+  # no loss of safety, because confusing two brands of the same drug is
+  # harmless. Set false to fall back to brand-string comparison.
+  collapse_same_composition: true
+
+reading:
+  # MEASURED on real Opus 5 output (VLM_CHECK/2.jpg): the model's confidences on
+  # handwritten brand names cluster tightly at 0.50-0.62, all with legible=true.
+  # A single 0.60 veto therefore cut the cluster in half and abstained on 2 of 4
+  # medicines it had actually read correctly (ANDIAL -> Loperamide,
+  # ZOFER -> Ondansetron). That is lost coverage, not safety.
+  #
+  # So confidence now DOWNGRADES rather than vetoes:
+  #   conf >= confident_read  -> may reach CONFIRMED
+  #   conf <  confident_read  -> capped at PROBABLE (accepted, flagged to the doctor)
+  #   conf <  abstain_below   -> ILLEGIBLE (genuinely unreadable)
+  #
+  # The safety property is preserved: nothing is silently CONFIRMED on a weak
+  # reading. Coverage improves because a weak reading with a 100-point fuzzy
+  # match against a 239k-brand vocabulary is corroborated by an independent,
+  # non-model source.
+  #
+  # Both numbers are still guesses — calibrating them against observed doctor
+  # corrections is T0 (§16.4).
+  confident_read: 0.60
+  abstain_below: 0.45

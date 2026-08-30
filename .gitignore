@@ -66,3 +66,18 @@ htmlcov/
 # Misc
 *.bak
 *.tmp
+
+# VLM response cache + spend ledger (regenerable; cache may contain PHI)
+ml_pipeline/.cache/
+
+# Large Indian medicine datasets (regenerable from source; 18MB+)
+ml_pipeline/data/india/*.csv
+
+# Datasets and eval images — large, regenerable, and the prescriptions contain
+# real patient names and a practising doctor's contact details (PHI).
+data_check/
+VLM_CHECK/
+ml_pipeline/data/ocr_dataset/
+ml_pipeline/data/rxhandbd/
+test_*.png
+*.ipynb
