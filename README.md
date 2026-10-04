@@ -580,6 +580,4 @@ expand DDI coverage for acute outpatient drugs.
 
 `§` references in code comments point to `docs/ARCHITECTURE_V2.md`.
 
----
 
-**Authors:** Shivam Bajaj and team · **Repo:** [github.com/Bajaj30/Lyproj](https://github.com/Bajaj30/Lyproj) · **License:** none specified yet
