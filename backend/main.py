@@ -18,6 +18,10 @@ Two behaviours this API is deliberately built around:
     clinician.
 
 Set READER=mock to run the whole product with no API key and no cost.
+
+Access (backend/auth/): prescription routes and uploaded images are for signed-in
+DOCTORS only — the images are patient data. The manual interaction lookup and
+/api/health stay public; neither touches a patient record.
 """
 
 from __future__ import annotations
@@ -31,9 +35,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -45,7 +49,10 @@ from env import load_env  # noqa: E402
 
 load_env()
 
+from auth import Role, User, current_user, require_roles  # noqa: E402
+from auth import router as auth_router  # noqa: E402
 from config.database import Base, engine, get_db  # noqa: E402
+from config.settings import settings  # noqa: E402
 from drug_interaction.interaction_inference import InteractionChecker  # noqa: E402
 from ingest.normalise import normalise  # noqa: E402
 from models import Correction, CorrectionType, InteractionRun, Prescription  # noqa: E402
@@ -62,11 +69,32 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 READER_KIND = os.environ.get("READER", "claude")
 
 app = FastAPI(title="PrescriptAI API", version="2.0.0")
+
+CSRF_HEADER, CSRF_VALUE = "x-requested-with", "PrescriptAI"
+
+
+@app.middleware("http")
+async def csrf_guard(request: Request, call_next):
+    """The session is a cookie, so a state-changing request must also carry a
+    custom header. A browser only lets another site send one after a CORS
+    preflight, which the origin list below refuses — so a forged form post or
+    cross-site fetch cannot ride the cookie."""
+    if (request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and request.url.path.startswith("/api/")
+            and request.headers.get(CSRF_HEADER) != CSRF_VALUE):
+        return JSONResponse({"detail": "Missing request header."}, status_code=403)
+    return await call_next(request)
+
+
+# Added after the CSRF guard so it wraps it: a refused request still carries
+# the CORS headers, and the browser shows the real error instead of a CORS one.
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+    CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.include_router(auth_router)
+
+doctor_only = require_roles(Role.DOCTOR)
 
 _reader = None
 _checker = None
@@ -81,6 +109,9 @@ def _startup() -> None:
     _checker = InteractionChecker()
     cfg = load_config()
     print(f"[API] vocabulary region={cfg.region} nlem={cfg.nlem_enabled}", flush=True)
+    if "change-in-production" in settings.SECRET_KEY:
+        print("[API] WARNING: SECRET_KEY is the built-in default. Set it in .env "
+              "before anyone but a developer uses this.", flush=True)
 
 
 # ─── response models ─────────────────────────────────────────────────────────
@@ -151,7 +182,7 @@ class CorrectionIn(BaseModel):
     corrected_value: Optional[str] = None
     correction_type: CorrectionType = CorrectionType.OTHER
     note: Optional[str] = None
-    corrected_by: str = "doctor"
+    corrected_by: str = Field("doctor", description="Ignored — taken from the signed-in user")
 
 
 DISCLAIMER = (
@@ -216,7 +247,8 @@ def health():
 
 @app.post("/api/prescriptions/upload", response_model=PrescriptionOut)
 async def upload_prescription(
-    image: UploadFile = File(...), db: Session = Depends(get_db)
+    image: UploadFile = File(...), db: Session = Depends(get_db),
+    user: User = Depends(doctor_only),
 ):
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image (jpg, png, ...)")
@@ -267,7 +299,7 @@ async def upload_prescription(
 @app.get("/api/prescriptions", response_model=List[PrescriptionOut])
 def list_prescriptions(
     limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), user: User = Depends(doctor_only),
 ):
     rows = (
         db.query(Prescription).order_by(Prescription.created_at.desc())
@@ -277,7 +309,9 @@ def list_prescriptions(
 
 
 @app.get("/api/prescriptions/{prescription_id}", response_model=PrescriptionOut)
-def get_prescription(prescription_id: str, db: Session = Depends(get_db)):
+def get_prescription(
+    prescription_id: str, db: Session = Depends(get_db), user: User = Depends(doctor_only)
+):
     rx = db.get(Prescription, prescription_id)
     if not rx:
         raise HTTPException(404, "Prescription not found")
@@ -286,7 +320,8 @@ def get_prescription(prescription_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/prescriptions/{prescription_id}/corrections")
 def add_correction(
-    prescription_id: str, body: CorrectionIn, db: Session = Depends(get_db)
+    prescription_id: str, body: CorrectionIn, db: Session = Depends(get_db),
+    user: User = Depends(doctor_only),
 ):
     """Record one doctor edit.
 
@@ -312,7 +347,9 @@ def add_correction(
         corrected_value=body.corrected_value,
         correction_type=body.correction_type, model_confidence=conf,
         match_score=score, outcome=outcome, verification=verification,
-        corrected_by=body.corrected_by, note=body.note,
+        # Who made the edit comes from the session, not the request body: an
+        # audit trail the client can write its own name into is not one.
+        corrected_by=user.id, note=body.note,
     )
     db.add(c)
 
@@ -326,7 +363,7 @@ def add_correction(
 
 @app.post("/api/prescriptions/{prescription_id}/review")
 def mark_reviewed(
-    prescription_id: str, reviewed_by: str = "doctor", db: Session = Depends(get_db)
+    prescription_id: str, db: Session = Depends(get_db), user: User = Depends(doctor_only)
 ):
     """Confirm a page. An unchanged page is a fully labelled page — the majority
     class — and is worthless to a later training run if only edits are stored."""
@@ -334,7 +371,7 @@ def mark_reviewed(
     if not rx:
         raise HTTPException(404, "Prescription not found")
     rx.reviewed_at = datetime.now(timezone.utc)
-    rx.reviewed_by = reviewed_by
+    rx.reviewed_by = user.id
     db.commit()
     return {"ok": True, "reviewed_at": rx.reviewed_at.isoformat()}
 
@@ -357,7 +394,7 @@ def check_interactions(body: InteractionCheckIn):
 
 
 @app.get("/api/stats")
-def stats(db: Session = Depends(get_db)):
+def stats(db: Session = Depends(get_db), user: User = Depends(doctor_only)):
     total = db.query(Prescription).count()
     reviewed = db.query(Prescription).filter(Prescription.reviewed_at.isnot(None)).count()
     corrections = db.query(Correction).count()
@@ -380,7 +417,10 @@ def stats(db: Session = Depends(get_db)):
 
 
 @app.get("/api/corrections")
-def list_corrections(limit: int = Query(100, ge=1, le=1000), db: Session = Depends(get_db)):
+def list_corrections(
+    limit: int = Query(100, ge=1, le=1000), db: Session = Depends(get_db),
+    user: User = Depends(doctor_only),
+):
     """The training corpus so far. Also how you check the log is complete
     before trusting any calibration run (§16.6 step 1)."""
     rows = db.query(Correction).order_by(Correction.created_at.desc()).limit(limit).all()
@@ -398,6 +438,17 @@ def list_corrections(limit: int = Query(100, ge=1, le=1000), db: Session = Depen
         }
         for c in rows
     ]
+
+
+
+@app.get("/uploads/{name}")
+def uploaded_image(name: str, user: User = Depends(doctor_only)):
+    """Prescription images are patient data: served to signed-in doctors only,
+    never as an open static directory."""
+    path = (UPLOAD_DIR / name).resolve()
+    if path.parent != UPLOAD_DIR.resolve() or not path.is_file():
+        raise HTTPException(404, "Not found")
+    return FileResponse(path)
 
 
 if __name__ == "__main__":

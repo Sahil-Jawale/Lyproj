@@ -29,6 +29,7 @@ output including an illegible line.
 | S5 doctor verification | ✅ built | Review screen + correction log persisted |
 | Backend API | ✅ built | SQLite, 8 routes, all tested |
 | Frontend | ✅ built | Review + results screens, vite build passes |
+| Authentication (3 roles) | ✅ built, tested | Session 7. 77 API + 21 browser checks |
 
 ### Live API status: verified
 
@@ -37,6 +38,85 @@ unverified SDK assumption (§6.4). Structured output, prompt caching, the spend
 ledger and the verbatim rule all confirmed on real calls.
 
 Spend so far: **$0.0686 across 2 calls**, cap $5.00.
+
+---
+
+## Session 7: Accounts for every stakeholder
+
+[`Workflow.md`](Workflow.md) names three actors: doctor, patient and chemist. Until
+now the API had no identity at all: anyone who could reach port 8000 could list
+every prescription, and `/uploads` served patient photographs as an open
+directory. This session adds one account system for all three roles. The full
+reference is README §6a.
+
+### Decisions
+
+**Server-side sessions, not JWTs.** The token is opaque (256 bits), lives in an
+`HttpOnly; SameSite=Lax` cookie, and only its SHA-256 is stored. Logout and "end
+this session" therefore take effect immediately, which a stateless JWT cannot do
+without a denylist. The cost is one indexed lookup per request.
+
+**CSRF by custom header.** A cookie session needs CSRF protection. Every unsafe
+`/api/*` request must carry `X-Requested-With: PrescriptAI`, and CORS moved from
+`*` to an explicit origin list. A foreign site can't set the header without a
+preflight, and the preflight is refused.
+
+**Standard library only.** No auth packages were installed (no bcrypt, argon2,
+pyotp or cryptography), so: `hashlib.scrypt` for passwords, `secrets` for tokens,
+and RFC 6238 TOTP in about 20 lines of `hmac`. That adds nothing new to audit.
+The cost is that `mfa_secret` is stored unencrypted (open item 6).
+
+**No account enumeration.** Login, forgot and reset answer an unknown account
+exactly as they answer a real one: same message, a dummy scrypt for the same
+timing, and throttling keyed on the *identifier* rather than the account row. A
+real account and a made-up one both hit `429` after 5 failures.
+
+**Recovery is never silent.** Reset ends every session and does not sign in. MFA
+stays on, so a reset only gets you as far as the second factor. Username-only
+accounts get recovery codes at sign-up, because they have no channel to reset
+through.
+
+**Doctor-only patient data.** Every prescription route depends on
+`require_roles(Role.DOCTOR)`, and `/uploads` became a guarded route.
+`corrected_by` / `reviewed_by` are now the signed-in user's id from the session.
+Before this, the client sent `"doctor"` in the body, which made the audit trail
+something the client wrote about itself.
+
+### Patient and pharmacy screens are honest placeholders
+
+Both roles can register and sign in, but Workflow stages 4–7 aren't built. Their
+home pages show a security checklist and say plainly what's coming. They show no
+sample prescriptions, for the same reason Session 6 deleted the fabricated upload
+results.
+
+### Verified
+
+- **API, 77 checks** (scratch script, live server, throwaway DB): every
+  registration path, identifier normalisation, CSRF and CORS refusal,
+  401/403 by role, path traversal on `/uploads`, enumeration parity, lockout,
+  reset by code and by recovery code (single use), TOTP enable/login/replay
+  refusal, challenge burn-out, revoke-others, password change, contact change,
+  resend cooldown, idle expiry, audit events, scrypt at rest.
+- **Browser, 21 checks** (Playwright driving Chrome on the real Vite app): sign-up
+  → verify → upload → the protected image loads by cookie; MFA set-up by QR; sign
+  out; MFA login returns to the page that asked; patient by phone; role redirects;
+  forgot → reset → sign in; username sign-up on a 390 px viewport with no
+  horizontal scroll. No console errors.
+- `fastapi.testclient` doesn't work in this environment (`httpx` 0.28 is newer
+  than Starlette 0.35 supports), so no pytest suite was added. Both scripts drive
+  a real server instead.
+
+### Open items added
+
+6. **Encrypt `mfa_secret` at rest** (KMS key) before production.
+7. **Real SMS / email delivery.** Phone codes always print to the console; email
+   codes do too unless `SMTP_HOST` is set.
+8. **Rate limiter is per-process memory.** Move it to Redis before running more
+   than one worker.
+9. **No vetting of doctors or pharmacies.** Registration and licence numbers are
+   self-declared (Workflow.md §10 Q5).
+10. **No per-doctor ownership.** Any doctor sees every prescription until Workflow
+    stage 1 adds sessions.
 
 ---
 
